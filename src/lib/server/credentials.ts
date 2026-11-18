@@ -18,6 +18,24 @@ export async function submitCredentials(
   }
 
   const address = email.trim();
+  if (mode === 'register') {
+    const confirmation = form.get('passwordConfirmation');
+    if (typeof confirmation !== 'string' || confirmation === '') {
+      return fail(400, {
+        email: address,
+        message: 'Bestätige dein Passwort.',
+        confirmationError: true
+      });
+    }
+    if (confirmation !== password) {
+      return fail(400, {
+        email: address,
+        message: 'Die Passwörter stimmen nicht überein.',
+        confirmationError: true
+      });
+    }
+  }
+
   const auth = getAuth();
 
   try {

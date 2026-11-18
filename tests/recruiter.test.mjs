@@ -36,7 +36,7 @@ test('Recruiter registrieren sich und erhalten direkt Zugang', async () => {
   const email = `recruiter-${randomUUID()}@example.com`;
 
   const registration = await request('/registrieren', {
-    form: { email, password: '12345678' }
+    form: { email, password: '12345678', passwordConfirmation: '12345678' }
   });
   redirectsTo(registration, '/recruiter');
 
@@ -48,11 +48,36 @@ test('Recruiter registrieren sich und erhalten direkt Zugang', async () => {
   assert.match(page.headers.get('cache-control'), /no-store/);
 });
 
+test('Registrierung erfordert eine übereinstimmende Passwortbestätigung', async () => {
+  const email = `recruiter-${randomUUID()}@example.com`;
+  const password = 'test-password-123';
+
+  for (const [confirmation, message] of [
+    [{}, /Bestätige dein Passwort/],
+    [
+      { passwordConfirmation: 'other-password-123' },
+      /Passwörter stimmen nicht überein/
+    ]
+  ]) {
+    const response = await request('/registrieren', {
+      form: { email, password, ...confirmation }
+    });
+    assert.equal(response.status, 400);
+    assert.match(await response.text(), message);
+    assert.equal(response.headers.getSetCookie().length, 0);
+  }
+
+  const corrected = await request('/registrieren', {
+    form: { email, password, passwordConfirmation: password }
+  });
+  redirectsTo(corrected, '/recruiter');
+});
+
 test('Recruiter melden sich an und beenden ihre Sitzung bei der Abmeldung', async () => {
   const email = `recruiter-${randomUUID()}@example.com`;
   const password = 'test-password-123';
   const registration = await request('/registrieren', {
-    form: { email, password }
+    form: { email, password, passwordConfirmation: password }
   });
   redirectsTo(registration, '/recruiter');
 
@@ -98,7 +123,7 @@ test('Registrierung prüft E-Mail-Adresse und Passwort auf dem Server', async ()
     [`recruiter-${randomUUID()}@example.com`, '1234567', /mindestens 8 Zeichen/]
   ]) {
     const response = await request('/registrieren', {
-      form: { email, password }
+      form: { email, password, passwordConfirmation: password }
     });
     assert.equal(response.status, 400);
     assert.match(await response.text(), message);

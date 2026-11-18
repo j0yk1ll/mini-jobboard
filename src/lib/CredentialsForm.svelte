@@ -7,7 +7,11 @@
     form
   }: {
     registration?: boolean;
-    form?: { email?: string; message: string } | null;
+    form?: {
+      email?: string;
+      message: string;
+      confirmationError?: boolean;
+    } | null;
   } = $props();
 
   const title = $derived(registration ? 'Registrieren' : 'Anmelden');
@@ -20,7 +24,7 @@
 <h1>{title}</h1>
 
 {#if form?.message}
-  <p class="error" role="alert">{form.message}</p>
+  <p id="credentials-error" class="error" role="alert">{form.message}</p>
 {/if}
 
 <form method="POST">
@@ -51,6 +55,23 @@
       <small id="password-hint">Mindestens {MIN_PASSWORD_LENGTH} Zeichen</small>
     {/if}
   </div>
+  {#if registration}
+    <div>
+      <label for="password-confirmation">Passwort bestätigen</label>
+      <input
+        id="password-confirmation"
+        name="passwordConfirmation"
+        type="password"
+        autocomplete="new-password"
+        maxlength={MAX_PASSWORD_LENGTH}
+        aria-invalid={form?.confirmationError ? true : undefined}
+        aria-describedby={form?.confirmationError
+          ? 'credentials-error'
+          : undefined}
+        required
+      />
+    </div>
+  {/if}
   <button type="submit">{title}</button>
 </form>
 
