@@ -1,0 +1,59 @@
+name: CI
+
+on: [push]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: jobboard
+          POSTGRES_USER: jobboard
+          POSTGRES_PASSWORD: integration
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U jobboard -d jobboard"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      BETTER_AUTH_SECRET: integration-only-session-signing-key-for-test-runner
+      ORIGIN: http://127.0.0.1:3000
+      TEST_ORIGIN: http://127.0.0.1:3000
+      HOST: 127.0.0.1
+      PORT: 3000
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run check
+      - run: npm run build
+      - name: HTTP-Integrationstest
+        env:
+          DATABASE_URL: postgresql://jobboard:integration@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/jobboard
+        run: |
+          npm run db:migrate
+          node build > app.log 2>&1 &
+          app_pid=$!
+          trap 'kill "$app_pid" 2>/dev/null || true; cat app.log' EXIT
+          curl --fail --silent --show-error --retry 20 --retry-connrefused --retry-delay 1 "$TEST_ORIGIN/anmelden" --output /dev/null
+          npm test
+
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - run: docker build --tag mini-jobboard:ci .
