@@ -3,7 +3,8 @@ import { getDb } from '#lib/server/db.ts';
 import { stellenanzeige } from '#lib/server/schema.ts';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async ({ setHeaders }) => {
+  setHeaders({ 'cache-control': 'no-cache' });
   const stellenanzeigen = await getDb()
     .select({ id: stellenanzeige.id, title: stellenanzeige.title })
     .from(stellenanzeige)

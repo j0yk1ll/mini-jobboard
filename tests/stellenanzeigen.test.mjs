@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
-import pg from 'pg';
 
 const origin = process.env.TEST_ORIGIN ?? 'http://localhost:3000';
 
@@ -33,6 +32,22 @@ async function registerRecruiter() {
     .find((value) => value.includes('.session_token='));
   assert.ok(cookie);
   return cookie.split(';', 1)[0];
+}
+
+async function publishStellenanzeige(cookie, title, description) {
+  const published = await request('/recruiter?/veroeffentlichen', {
+    cookie,
+    form: { title, description }
+  });
+  assert.equal(published.status, 303);
+
+  const list = await request('/');
+  assert.equal(list.status, 200);
+  const link = (await list.text()).match(
+    new RegExp(`<a href="([^" ]*stellenanzeigen/[^"/]+)">${title}</a>`)
+  );
+  assert.ok(link, 'Öffentliche Liste verlinkt die Stellenanzeige');
+  return new URL(link[1], origin).pathname;
 }
 
 test('Nur der angemeldete Recruiter veröffentlicht und sieht seine Stellenanzeige im eigenen Bereich', async () => {
@@ -103,30 +118,87 @@ test('Der Server verlangt Titel und Beschreibung und prüft die Länge nach dem 
   assert.ok((await page.text()).includes(`>${validTitle}</`));
 });
 
-test('Besucher finden offene Stellenanzeigen und lesen Beschreibungen als Klartext', async () => {
-  assert.ok(
-    process.env.DATABASE_URL,
-    'DATABASE_URL muss auf die Testdatenbank der Anwendung zeigen'
+test('Der zuständige Recruiter kann Titel und Beschreibung im eigenen Bereich ändern', async () => {
+  const cookie = await registerRecruiter();
+  const otherCookie = await registerRecruiter();
+  const title = `Redaktion ${randomUUID()}`;
+  const publicPath = await publishStellenanzeige(
+    cookie,
+    title,
+    'Bisheriger Text'
   );
+  const privatePath = `/recruiter${publicPath}`;
+  const editPath = `${privatePath}?/bearbeiten`;
+  const updatedTitle = `Lektorat ${randomUUID()}`.padEnd(120, 'z');
+  const updatedDescription = 'Neuer Text.\nZweite Zeile.'.padEnd(5000, 'x');
+  const form = {
+    title: ` ${updatedTitle} `,
+    description: ` \n${updatedDescription}\n `
+  };
+
+  const dashboard = await request('/recruiter', { cookie });
+  const dashboardLinks = [
+    ...(await dashboard.text()).matchAll(/href="([^"]+)"/g)
+  ];
+  assert.ok(
+    dashboardLinks.some(
+      ([, href]) =>
+        new URL(href, `${origin}/recruiter`).pathname === privatePath
+    )
+  );
+
+  const editor = await request(privatePath, { cookie });
+  assert.equal(editor.status, 200);
+  assert.equal(editor.headers.get('cache-control'), 'no-store');
+  const editorHtml = await editor.text();
+  assert.ok(editorHtml.includes(`value="${title}"`));
+  assert.match(editorHtml, /Bisheriger Text<\/textarea>/);
+
+  for (const path of [privatePath, editPath]) {
+    const options = path === editPath ? { form } : {};
+    const anonymous = await request(path, options);
+    assert.equal(anonymous.status, 303);
+    assert.equal(anonymous.headers.get('location'), '/anmelden');
+    assert.equal(
+      (await request(path, { ...options, cookie: otherCookie })).status,
+      404
+    );
+  }
+
+  for (const [fields, message] of [
+    [{ ...form, title: '  ' }, /Gib einen Titel ein/],
+    [{ ...form, description: '  ' }, /Gib eine Beschreibung ein/],
+    [{ ...form, title: `${updatedTitle}z` }, /höchstens 120 Zeichen/],
+    [
+      { ...form, description: `${updatedDescription}x` },
+      /höchstens 5000 Zeichen/
+    ]
+  ]) {
+    const invalid = await request(editPath, { cookie, form: fields });
+    assert.equal(invalid.status, 400);
+    assert.match(await invalid.text(), message);
+  }
+  assert.ok((await (await request(publicPath)).text()).includes(title));
+
+  const updated = await request(editPath, { cookie, form });
+  assert.equal(updated.status, 303);
+  assert.equal(updated.headers.get('location'), privatePath);
+  assert.ok((await (await request('/')).text()).includes(updatedTitle));
+  const publicHtml = await (await request(publicPath)).text();
+  assert.ok(publicHtml.includes(`>${updatedTitle}</h1>`));
+  assert.ok(publicHtml.includes(`>${updatedDescription}</p>`));
+});
+
+test('Besucher finden offene Stellenanzeigen und lesen Beschreibungen als Klartext', async () => {
   const cookie = await registerRecruiter();
   const title = `Redaktion ${randomUUID()}`;
-  const published = await request('/recruiter?/veroeffentlichen', {
+  const publicPath = await publishStellenanzeige(
     cookie,
-    form: {
-      title,
-      description: '  Erste Zeile.\r\n\r\n<strong>Zweite Zeile.</strong>  '
-    }
-  });
-  assert.equal(published.status, 303);
-
-  const list = await request('/');
-  assert.equal(list.status, 200);
-  const link = (await list.text()).match(
-    new RegExp(`<a href="([^" ]*stellenanzeigen/[^"/]+)">${title}</a>`)
+    title,
+    '  Erste Zeile.\r\n\r\n<strong>Zweite Zeile.</strong>  '
   );
-  assert.ok(link, 'Öffentliche Liste verlinkt die Stellenanzeige');
 
-  const detail = await request(link[1]);
+  const detail = await request(publicPath);
   assert.equal(detail.status, 200);
   const html = await detail.text();
   assert.match(html, new RegExp(`<h1\\b[^>]*>${title}</h1>`));
@@ -136,30 +208,56 @@ test('Besucher finden offene Stellenanzeigen und lesen Beschreibungen als Klarte
   );
   assert.equal((await request(`/stellenanzeigen/${randomUUID()}`)).status, 404);
   assert.equal((await request('/stellenanzeigen/ungueltig')).status, 404);
+});
 
-  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-  try {
-    const { rowCount } = await pool.query(
-      "update stellenanzeige set status = 'closed' where id = $1 and title = $2",
-      [link[1].split('/').pop(), title]
-    );
+test('Der zuständige Recruiter kann eine Stellenanzeige schließen und wieder öffnen', async () => {
+  const cookie = await registerRecruiter();
+  const otherCookie = await registerRecruiter();
+  const title = `Vertrieb ${randomUUID()}`;
+  const description = 'Ein Platz im Team ist frei.';
+  const publicPath = await publishStellenanzeige(cookie, title, description);
+  const privatePath = `/recruiter${publicPath}`;
+
+  for (const [action, status, button, publicStatus] of [
+    ['schliessen', 'Geschlossen', 'Wieder öffnen', 404],
+    ['oeffnen', 'Offen', 'Schließen', 200]
+  ]) {
+    const actionPath = `${privatePath}?/${action}`;
+    const anonymous = await request(actionPath, { form: {} });
+    assert.equal(anonymous.status, 303);
+    assert.equal(anonymous.headers.get('location'), '/anmelden');
     assert.equal(
-      rowCount,
-      1,
-      'Die gerade veröffentlichte Stellenanzeige wurde geschlossen'
+      (await request(actionPath, { cookie: otherCookie, form: {} })).status,
+      404
     );
-  } finally {
-    await pool.end();
+    const before = await request(publicPath);
+    assert.equal(before.status, action === 'schliessen' ? 200 : 404);
+
+    const updated = await request(actionPath, { cookie, form: {} });
+    assert.equal(updated.status, 303);
+    assert.equal(updated.headers.get('location'), privatePath);
+
+    const dashboard = await request('/recruiter', { cookie });
+    assert.equal(dashboard.status, 200);
+    assert.ok(
+      (await dashboard.text()).includes(`${title}</strong> · ${status}`)
+    );
+
+    const editor = await request(privatePath, { cookie });
+    assert.equal(editor.status, 200);
+    const editorHtml = await editor.text();
+    assert.ok(editorHtml.includes(`>${button}</button>`));
+    assert.ok(editorHtml.includes(`${description}</textarea>`));
+
+    const publicList = await request('/');
+    assert.equal(publicList.status, 200);
+    assert.equal(
+      (await publicList.text()).includes(title),
+      publicStatus === 200
+    );
+    const publicDetail = await request(publicPath);
+    assert.equal(publicDetail.status, publicStatus);
+    if (publicStatus === 200)
+      assert.ok((await publicDetail.text()).includes(description));
   }
-
-  const publicList = await request('/');
-  assert.equal(publicList.status, 200);
-  assert.ok(!(await publicList.text()).includes(title));
-  assert.equal((await request(link[1])).status, 404);
-
-  const privateList = await request('/recruiter', { cookie });
-  assert.equal(privateList.status, 200);
-  assert.ok(
-    (await privateList.text()).includes(`${title}</strong> · Geschlossen`)
-  );
 });

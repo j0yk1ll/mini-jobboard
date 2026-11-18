@@ -1,3 +1,4 @@
+import { redirect } from '@sveltejs/kit';
 import { getRequestEvent } from '$app/server';
 import { drizzleAdapter } from '@better-auth/drizzle-adapter';
 import { betterAuth } from 'better-auth';
@@ -35,4 +36,11 @@ let auth: ReturnType<typeof createAuth> | undefined;
 
 export function getAuth() {
   return (auth ??= createAuth());
+}
+
+export async function requireRecruiter(request: Request) {
+  const session = await getAuth().api.getSession({ headers: request.headers });
+  if (!session) redirect(303, '/anmelden');
+
+  return session.user;
 }
