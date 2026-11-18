@@ -100,14 +100,24 @@ test('Die Compose-Demo richtet Beispieldaten einmalig ein', async (t) => {
     const dashboard = await request('/recruiter', { cookie });
     assert.equal(dashboard.status, 200);
     const dashboardHtml = await dashboard.text();
-    assert.equal(
-      dashboardHtml.split(`<strong>${title}</strong> · Offen`).length,
-      2
+    const rows = [...dashboardHtml.matchAll(/<li\b[^>]*>(.*?)<\/li>/gs)].map(
+      ([, row]) => row
     );
     assert.equal(
-      dashboardHtml.split(`<strong>${closedTitle}</strong> · Geschlossen`)
-        .length,
-      ownsClosedStellenanzeige ? 2 : 1
+      rows.filter(
+        (row) =>
+          new RegExp(`<strong\\b[^>]*>${title}</strong>`).test(row) &&
+          /<span\b[^>]*>Offen<\/span>/.test(row)
+      ).length,
+      1
+    );
+    assert.equal(
+      rows.filter(
+        (row) =>
+          new RegExp(`<strong\\b[^>]*>${closedTitle}</strong>`).test(row) &&
+          /<span\b[^>]*>Geschlossen<\/span>/.test(row)
+      ).length,
+      ownsClosedStellenanzeige ? 1 : 0
     );
     assert.ok(!dashboardHtml.includes(otherTitle));
 
@@ -115,7 +125,11 @@ test('Die Compose-Demo richtet Beispieldaten einmalig ein', async (t) => {
     const editor = await request(path, { cookie });
     assert.equal(editor.status, 200);
     const editorHtml = await editor.text();
-    assert.equal(editorHtml.split(`<h3>${applicant}</h3>`).length, 2);
+    assert.equal(
+      [...editorHtml.matchAll(new RegExp(`<h3\\b[^>]*>${applicant}</h3>`, 'g'))]
+        .length,
+      1
+    );
     assert.ok(editorHtml.includes(`Bewerbungsstatus: ${applicationStatus}`));
     const applications = [
       ...editorHtml.matchAll(/name="bewerbungId" value="([^"]+)"/g)

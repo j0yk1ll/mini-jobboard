@@ -52,6 +52,14 @@ async function publishStellenanzeige(cookie, title, description) {
   return new URL(link[1], origin).pathname;
 }
 
+function dashboardShowsListing(html, title, status) {
+  return [...html.matchAll(/<li\b[^>]*>(.*?)<\/li>/gs)].some(
+    ([, row]) =>
+      new RegExp(`<strong\\b[^>]*>${title}</strong>`).test(row) &&
+      new RegExp(`<span\\b[^>]*>${status}</span>`).test(row)
+  );
+}
+
 test('Nur der angemeldete Recruiter veröffentlicht und sieht seine Stellenanzeige im eigenen Bereich', async () => {
   const title = `Softwareentwicklung ${randomUUID()}`;
   const form = {
@@ -74,7 +82,7 @@ test('Nur der angemeldete Recruiter veröffentlicht und sieht seine Stellenanzei
 
   const ownPage = await request('/recruiter', { cookie });
   assert.equal(ownPage.status, 200);
-  assert.ok((await ownPage.text()).includes(`${title}</strong> · Offen`));
+  assert.ok(dashboardShowsListing(await ownPage.text(), title, 'Offen'));
 
   const otherPage = await request('/recruiter', {
     cookie: await registerRecruiter()
@@ -241,9 +249,7 @@ test('Der zuständige Recruiter kann eine Stellenanzeige schließen und wieder �
 
     const dashboard = await request('/recruiter', { cookie });
     assert.equal(dashboard.status, 200);
-    assert.ok(
-      (await dashboard.text()).includes(`${title}</strong> · ${status}`)
-    );
+    assert.ok(dashboardShowsListing(await dashboard.text(), title, status));
 
     const editor = await request(privatePath, { cookie });
     assert.equal(editor.status, 200);
@@ -331,6 +337,59 @@ const validBewerbung = {
 function submitBewerbung(publicPath, form = validBewerbung) {
   return request(`${publicPath}?/bewerben`, { form });
 }
+
+test('Recruiter sehen die Anzahl der Bewerbungen pro eigener Stellenanzeige und öffnen sie direkt', async () => {
+  const cookie = await registerRecruiter();
+  const otherCookie = await registerRecruiter();
+  const title = `Produktdesign ${randomUUID()}`;
+  const emptyTitle = `Projektassistenz ${randomUUID()}`;
+  const publicPath = await publishStellenanzeige(cookie, title, 'Beschreibung');
+  await publishStellenanzeige(cookie, emptyTitle, 'Beschreibung');
+  const privatePath = `/recruiter${publicPath}`;
+
+  await confirmBewerbung(await submitBewerbung(publicPath));
+  const single = await request('/recruiter', { cookie });
+  assert.match(await single.text(), />1 Bewerbung<\/a>/);
+
+  await confirmBewerbung(
+    await submitBewerbung(publicPath, {
+      ...validBewerbung,
+      email: 'zweite-bewerbung@example.com'
+    })
+  );
+  assert.equal(
+    (await request(`${privatePath}?/schliessen`, { cookie, form: {} })).status,
+    303
+  );
+
+  const dashboard = await request('/recruiter', { cookie });
+  assert.equal(dashboard.headers.get('cache-control'), 'no-store');
+  const rows = [
+    ...(await dashboard.text()).matchAll(/<li\b[^>]*>(.*?)<\/li>/gs)
+  ].map(([, row]) => row);
+  const listing = rows.find((row) => row.includes(title));
+  assert.ok(listing);
+  const applicationsLink = listing.match(
+    /<a\b[^>]*href="([^"]+)"[^>]*>2 Bewerbungen<\/a>/
+  );
+  assert.ok(applicationsLink);
+  const applicationsUrl = new URL(applicationsLink[1], origin);
+  assert.equal(applicationsUrl.pathname, privatePath);
+  assert.equal(applicationsUrl.hash, '#bewerbungen');
+  const emptyListing = rows.find((row) => row.includes(emptyTitle));
+  assert.ok(emptyListing);
+  assert.match(emptyListing, /Keine Bewerbungen/);
+
+  const applications = await request(applicationsUrl.pathname, { cookie });
+  assert.equal(applications.status, 200);
+  assert.match(await applications.text(), /id="bewerbungen"/);
+  const otherDashboard = await request('/recruiter', { cookie: otherCookie });
+  assert.doesNotMatch(await otherDashboard.text(), /2 Bewerbungen/);
+  assert.equal(
+    (await request(applicationsUrl.pathname, { cookie: otherCookie })).status,
+    404
+  );
+});
 
 test('Nur der zuständige Recruiter sieht Bewerbungen mit Klartext und initialem Status', async () => {
   const cookie = await registerRecruiter();

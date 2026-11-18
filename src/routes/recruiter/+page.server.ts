@@ -2,18 +2,23 @@ import { fail, redirect } from '@sveltejs/kit';
 import { asc, eq } from 'drizzle-orm';
 import { getAuth, requireRecruiter } from '#lib/server/auth.ts';
 import { getDb } from '#lib/server/db.ts';
-import { stellenanzeige } from '#lib/server/schema.ts';
+import { bewerbung, stellenanzeige } from '#lib/server/schema.ts';
 import { readStellenanzeige } from '#lib/server/stellenanzeige.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ request, setHeaders }) => {
   setHeaders({ 'cache-control': 'no-store' });
   const recruiter = await requireRecruiter(request);
-  const stellenanzeigen = await getDb()
+  const db = getDb();
+  const stellenanzeigen = await db
     .select({
       id: stellenanzeige.id,
       title: stellenanzeige.title,
-      status: stellenanzeige.status
+      status: stellenanzeige.status,
+      bewerbungsanzahl: db.$count(
+        bewerbung,
+        eq(bewerbung.stellenanzeigeId, stellenanzeige.id)
+      )
     })
     .from(stellenanzeige)
     .where(eq(stellenanzeige.recruiterId, recruiter.id))

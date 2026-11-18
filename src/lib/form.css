@@ -1,6 +1,6 @@
 .form-fields {
   display: grid;
-  gap: 1rem;
+  gap: 1.125rem;
 }
 
 .form-fields label,
@@ -9,18 +9,25 @@
 }
 
 .form-fields label {
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.375rem;
+  font-size: 0.9375rem;
   font-weight: 650;
+}
+
+.form-fields small {
+  margin-top: 0.375rem;
+  color: var(--muted);
 }
 
 .form-fields input,
 .form-fields select,
 .form-fields textarea {
-  box-sizing: border-box;
   width: 100%;
-  padding: 0.6rem 0.75rem;
-  border: 1px solid #6d8177;
-  border-radius: 0.375rem;
+  min-height: 2.75rem;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--control-line);
+  border-radius: 0.5rem;
+  background: var(--surface);
   color: inherit;
   font: inherit;
 }
@@ -29,7 +36,11 @@
   resize: vertical;
 }
 
+.form-fields [aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
 .form-fields .error {
-  margin: 0.25rem 0 0;
-  color: #8a2119;
+  margin: 0.375rem 0 0;
+  color: var(--danger);
 }

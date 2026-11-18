@@ -1,72 +1,77 @@
 <script lang="ts">
   import { resolve } from '$app/paths';
   import type { Snippet } from 'svelte';
+  import '#lib/app.css';
 
   let { children }: { children: Snippet } = $props();
 </script>
 
 <header>
-  <a href={resolve('/')}>Mini-Jobboard</a>
+  <nav class="content-width" aria-label="Hauptnavigation">
+    <a class="brand" href={resolve('/')}>
+      <span class="brand-mark" aria-hidden="true"></span>
+      Mini-Jobboard
+    </a>
+    <a class="recruiter-link" href={resolve('/recruiter')}>
+      Recruiter-Bereich <span aria-hidden="true">↗</span>
+    </a>
+  </nav>
 </header>
+
 <main>
   {@render children()}
 </main>
 
 <style>
-  :global(body) {
-    margin: 0;
-    background: #f6f7f2;
-    color: #172923;
-    font:
-      1rem/1.5 system-ui,
-      sans-serif;
-  }
-
-  :global(:focus-visible) {
-    outline: 3px solid #006565;
-    outline-offset: 3px;
-  }
-
-  :global(a) {
-    color: #005b4e;
-    text-underline-offset: 0.2em;
-  }
-
   header {
-    padding: 1rem max(1rem, calc((100% - 64rem) / 2));
-    border-bottom: 1px solid #c4cec7;
-    background: #fff;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface);
   }
 
-  header a {
+  nav {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0 1rem;
+    min-height: 4.25rem;
+    padding-block: 0.375rem;
+  }
+
+  nav a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 2.75rem;
+    color: var(--ink);
     font-weight: 700;
+    text-decoration: none;
   }
 
-  main {
-    box-sizing: border-box;
-    width: min(calc(100% - 2rem), 32rem);
-    margin: clamp(2rem, 8vw, 5rem) auto;
-    padding: clamp(1rem, 5vw, 2.5rem);
-    border: 1px solid #c4cec7;
-    border-radius: 0.75rem;
-    background: #fff;
-    overflow-wrap: anywhere;
+  nav a:hover {
+    color: var(--accent);
   }
 
-  :global(h1) {
-    margin: 0 0 1.5rem;
-    font-size: clamp(1.65rem, 6vw, 2.25rem);
-    line-height: 1.15;
+  .brand-mark {
+    display: grid;
+    width: 1.875rem;
+    height: 1.875rem;
+    place-items: center;
+    border-radius: 0.5rem;
+    background: var(--accent);
   }
 
-  :global(button) {
-    padding: 0.65rem 1rem;
-    border: 1px solid #005b4e;
-    border-radius: 0.375rem;
-    background: #005b4e;
-    color: #fff;
-    font: inherit;
-    font-weight: 650;
-    cursor: pointer;
+  .brand-mark::before {
+    width: 0.6875rem;
+    height: 0.6875rem;
+    border: solid #fff;
+    border-width: 0 0.125rem 0.125rem 0;
+    box-shadow: 0.1875rem 0.1875rem 0 #8aabff;
+    content: '';
+    rotate: -45deg;
+  }
+
+  .recruiter-link {
+    font-size: 0.875rem;
   }
 </style>
