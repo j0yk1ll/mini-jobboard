@@ -13,7 +13,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --omit=optional
 COPY --from=build /app/build ./build
 COPY drizzle ./drizzle
-COPY scripts/migrate.mjs ./scripts/migrate.mjs
+COPY scripts/migrate.mjs scripts/seed-demo.mjs ./scripts/
 USER node
 EXPOSE 3000
-CMD ["sh", "-c", "npm run db:migrate && exec node build"]
+CMD ["sh", "-ec", "npm run db:migrate; if [ \"$SEED_DEMO\" = 1 ]; then node scripts/seed-demo.mjs; fi; exec node build"]

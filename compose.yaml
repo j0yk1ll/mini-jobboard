@@ -8,6 +8,7 @@ services:
       ORIGIN: ${ORIGIN:-http://localhost:3000}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-mini-jobboard-local-only-session-signing-key}
       DATABASE_URL: postgresql://jobboard:jobboard@db:5432/jobboard
+      SEED_DEMO: ${SEED_DEMO:-1}
     ports:
       - '127.0.0.1:${APP_PORT:-3000}:3000'
 
