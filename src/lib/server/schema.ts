@@ -1,4 +1,12 @@
-import { boolean, index, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  index,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uuid
+} from 'drizzle-orm/pg-core';
 
 export const user = pgTable('user', {
   id: text('id').primaryKey(),
@@ -60,4 +68,23 @@ export const verification = pgTable(
     updatedAt: timestamp('updated_at').defaultNow().notNull()
   },
   (table) => [index('verification_identifier_idx').on(table.identifier)]
+);
+
+export const stellenanzeigenStatus = pgEnum('stellenanzeigen_status', [
+  'open',
+  'closed'
+]);
+
+export const stellenanzeige = pgTable(
+  'stellenanzeige',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    recruiterId: text('recruiter_id')
+      .notNull()
+      .references(() => user.id),
+    title: text('title').notNull(),
+    description: text('description').notNull(),
+    status: stellenanzeigenStatus('status').default('open').notNull()
+  },
+  (table) => [index('stellenanzeige_recruiter_id_idx').on(table.recruiterId)]
 );
