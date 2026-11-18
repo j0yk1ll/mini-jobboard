@@ -1,4 +1,5 @@
 <script lang="ts">
+  import '#lib/form.css';
   import {
     MAX_DESCRIPTION_LENGTH,
     MAX_TITLE_LENGTH
@@ -22,7 +23,7 @@
   } = $props();
 </script>
 
-<form method="POST" {action}>
+<form class="form-fields" method="POST" {action}>
   <div>
     <label for="title">Titel</label>
     <input
@@ -62,40 +63,3 @@
   </div>
   <button type="submit">{submitLabel}</button>
 </form>
-
-<style>
-  form {
-    display: grid;
-    gap: 1rem;
-  }
-
-  label,
-  small {
-    display: block;
-  }
-
-  label {
-    margin-bottom: 0.25rem;
-    font-weight: 650;
-  }
-
-  input,
-  textarea {
-    box-sizing: border-box;
-    width: 100%;
-    padding: 0.6rem 0.75rem;
-    border: 1px solid #6d8177;
-    border-radius: 0.375rem;
-    color: inherit;
-    font: inherit;
-  }
-
-  textarea {
-    resize: vertical;
-  }
-
-  .error {
-    margin: 0.25rem 0 0;
-    color: #8a2119;
-  }
-</style>

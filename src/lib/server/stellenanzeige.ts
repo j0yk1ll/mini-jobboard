@@ -2,6 +2,7 @@ import {
   MAX_DESCRIPTION_LENGTH,
   MAX_TITLE_LENGTH
 } from '#lib/stellenanzeige.ts';
+import { readText, validateText } from './form';
 
 export function isStellenanzeigeId(id: string) {
   return /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(id);
@@ -23,22 +24,4 @@ export function readStellenanzeige(form: FormData) {
     'Gib eine Beschreibung ein.'
   );
   return { title, description, titleError, descriptionError };
-}
-
-function readText(form: FormData, name: string) {
-  const value = form.get(name);
-  return typeof value === 'string' ? value.replace(/\r\n?/g, '\n').trim() : '';
-}
-
-function validateText(
-  value: string,
-  maxLength: number,
-  label: string,
-  requiredMessage: string
-) {
-  if (!value) return requiredMessage;
-  if (value.includes('\0')) return `${label} enthält ein ungültiges Zeichen.`;
-  if ([...value].length > maxLength) {
-    return `${label} darf höchstens ${maxLength} Zeichen haben.`;
-  }
 }

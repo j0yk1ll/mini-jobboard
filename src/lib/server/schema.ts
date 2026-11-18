@@ -1,10 +1,13 @@
+import { sql } from 'drizzle-orm';
 import {
   boolean,
+  check,
   index,
   pgEnum,
   pgTable,
   text,
   timestamp,
+  unique,
   uuid
 } from 'drizzle-orm/pg-core';
 
@@ -87,4 +90,35 @@ export const stellenanzeige = pgTable(
     status: stellenanzeigenStatus('status').default('open').notNull()
   },
   (table) => [index('stellenanzeige_recruiter_id_idx').on(table.recruiterId)]
+);
+
+export const bewerbungsstatus = pgEnum('bewerbungsstatus', [
+  'neu',
+  'eingeladen',
+  'abgelehnt'
+]);
+
+export const bewerbung = pgTable(
+  'bewerbung',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    stellenanzeigeId: uuid('stellenanzeige_id')
+      .notNull()
+      .references(() => stellenanzeige.id),
+    name: text('name').notNull(),
+    email: text('email').notNull(),
+    text: text('text').notNull(),
+    status: bewerbungsstatus('status').default('neu').notNull()
+  },
+  (table) => [
+    unique('bewerbung_stellenanzeige_email_unique').on(
+      table.stellenanzeigeId,
+      table.email
+    ),
+    check(
+      'bewerbung_email_normalized',
+      sql`${table.email} = lower(${table.email} COLLATE "C")
+        AND ${table.email} COLLATE "C" !~ '[^!-~]'`
+    )
+  ]
 );

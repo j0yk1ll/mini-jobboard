@@ -15,6 +15,13 @@
       "when": 1794997788042,
       "tag": "0001_stellenanzeigen",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795000030046,
+      "tag": "0002_bewerbungen",
+      "breakpoints": true
     }
   ]
 }
