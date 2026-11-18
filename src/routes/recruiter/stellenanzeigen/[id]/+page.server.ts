@@ -1,17 +1,16 @@
 import { error, fail, redirect } from '@sveltejs/kit';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
+import { BEWERBUNGSSTATUS } from '#lib/bewerbung.ts';
 import { requireRecruiter } from '#lib/server/auth.ts';
 import { getDb } from '#lib/server/db.ts';
-import { stellenanzeige } from '#lib/server/schema.ts';
-import {
-  isStellenanzeigeId,
-  readStellenanzeige
-} from '#lib/server/stellenanzeige.ts';
+import { isUuid } from '#lib/server/form.ts';
+import { bewerbung, stellenanzeige } from '#lib/server/schema.ts';
+import { readStellenanzeige } from '#lib/server/stellenanzeige.ts';
 import type { Actions, PageServerLoad, RequestEvent } from './$types';
 
 async function ownershipFilter(request: Request, id: string) {
   const recruiter = await requireRecruiter(request);
-  if (!isStellenanzeigeId(id)) {
+  if (!isUuid(id)) {
     error(404, 'Stellenanzeige nicht gefunden');
   }
 
@@ -40,7 +39,23 @@ async function loadStellenanzeige(
 export const load: PageServerLoad = async ({ request, params, setHeaders }) => {
   setHeaders({ 'cache-control': 'no-store' });
   const filter = await ownershipFilter(request, params.id);
-  return { anzeige: await loadStellenanzeige(filter) };
+  const anzeige = await loadStellenanzeige(filter);
+  const bewerbungen = await getDb()
+    .select({
+      id: bewerbung.id,
+      name: bewerbung.name,
+      email: bewerbung.email,
+      text: bewerbung.text,
+      status: bewerbung.status
+    })
+    .from(bewerbung)
+    .innerJoin(
+      stellenanzeige,
+      eq(bewerbung.stellenanzeigeId, stellenanzeige.id)
+    )
+    .where(filter)
+    .orderBy(bewerbung.name, bewerbung.id);
+  return { anzeige, bewerbungen };
 };
 
 async function updateStellenanzeige(
@@ -86,5 +101,41 @@ export const actions: Actions = {
     );
   },
   schliessen: (event) => setStatus(event, 'closed'),
-  oeffnen: (event) => setStatus(event, 'open')
+  oeffnen: (event) => setStatus(event, 'open'),
+  bewerbungsstatus: async ({ request, params, url }) => {
+    const filter = await ownershipFilter(request, params.id);
+    const fields = await request.formData();
+    const bewerbungId = fields.get('bewerbungId');
+    if (!isUuid(bewerbungId)) error(404, 'Bewerbung nicht gefunden');
+
+    const db = getDb();
+    const bewerbungFilter = and(
+      eq(bewerbung.id, bewerbungId),
+      inArray(
+        bewerbung.stellenanzeigeId,
+        db.select({ id: stellenanzeige.id }).from(stellenanzeige).where(filter)
+      )
+    );
+    const submittedStatus = fields.get('status');
+    const status = BEWERBUNGSSTATUS.find((value) => value === submittedStatus);
+    if (!status) {
+      const [found] = await db
+        .select({ id: bewerbung.id })
+        .from(bewerbung)
+        .where(bewerbungFilter);
+      if (!found) error(404, 'Bewerbung nicht gefunden');
+      return fail(400, {
+        bewerbungId: found.id,
+        statusError: 'Wähle einen gültigen Bewerbungsstatus.'
+      });
+    }
+
+    const [updated] = await db
+      .update(bewerbung)
+      .set({ status })
+      .where(bewerbungFilter)
+      .returning({ id: bewerbung.id });
+    if (!updated) error(404, 'Bewerbung nicht gefunden');
+    redirect(303, url.pathname);
+  }
 };

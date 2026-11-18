@@ -14,6 +14,7 @@
 }
 
 .form-fields input,
+.form-fields select,
 .form-fields textarea {
   box-sizing: border-box;
   width: 100%;

@@ -4,10 +4,6 @@ import {
 } from '#lib/stellenanzeige.ts';
 import { readText, validateText } from './form';
 
-export function isStellenanzeigeId(id: string) {
-  return /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(id);
-}
-
 export function readStellenanzeige(form: FormData) {
   const title = readText(form, 'title');
   const description = readText(form, 'description');

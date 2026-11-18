@@ -332,6 +332,121 @@ function submitBewerbung(publicPath, form = validBewerbung) {
   return request(`${publicPath}?/bewerben`, { form });
 }
 
+test('Nur der zuständige Recruiter sieht Bewerbungen mit Klartext und initialem Status', async () => {
+  const cookie = await registerRecruiter();
+  const otherCookie = await registerRecruiter();
+  const publicPath = await publishStellenanzeige(
+    cookie,
+    `Gestaltung ${randomUUID()}`,
+    'Wir suchen Verstärkung.'
+  );
+  const privatePath = `/recruiter${publicPath}`;
+  await confirmBewerbung(
+    await submitBewerbung(publicPath, {
+      ...validBewerbung,
+      text: 'Erste Zeile.\r\n<br>Zweite Zeile.'
+    })
+  );
+
+  const ownPage = await request(privatePath, { cookie });
+  assert.equal(ownPage.status, 200);
+  assert.equal(ownPage.headers.get('cache-control'), 'no-store');
+  const html = await ownPage.text();
+  assert.match(html, />Ada Beispiel<\/h3>/);
+  assert.match(html, />ada@example\.com<\/p>/);
+  assert.match(html, />Erste Zeile\.\n&lt;br(?:&gt;|>)Zweite Zeile\.<\/p>/);
+  assert.match(html, />Bewerbungsstatus: neu<\/p>/);
+
+  const otherPage = await request(privatePath, { cookie: otherCookie });
+  assert.equal(otherPage.status, 404);
+  assert.doesNotMatch(
+    await otherPage.text(),
+    /Ada Beispiel|ada@example\.com|Zweite Zeile/
+  );
+
+  const anonymous = await request(privatePath);
+  assert.equal(anonymous.status, 303);
+  assert.equal(anonymous.headers.get('location'), '/anmelden');
+  assert.doesNotMatch(
+    await (await request(publicPath)).text(),
+    /Ada Beispiel|ada@example\.com|Zweite Zeile/
+  );
+});
+
+test('Nur der zuständige Recruiter kann den Bewerbungsstatus ändern, auch bei geschlossenen Stellenanzeigen', async () => {
+  const cookie = await registerRecruiter();
+  const otherCookie = await registerRecruiter();
+  const publicPath = await publishStellenanzeige(
+    cookie,
+    `Fertigung ${randomUUID()}`,
+    'Wir suchen Verstärkung.'
+  );
+  const otherPublicPath = await publishStellenanzeige(
+    otherCookie,
+    `Verwaltung ${randomUUID()}`,
+    'Wir suchen Verstärkung.'
+  );
+  const privatePath = `/recruiter${publicPath}`;
+  await confirmBewerbung(await submitBewerbung(publicPath));
+
+  const editor = await request(privatePath, { cookie });
+  const statusForm = (await editor.text()).match(
+    /<form\b[^>]*action="(\?\/bewerbungsstatus)"[^>]*>.*?name="bewerbungId" value="([^"]+)"/s
+  );
+  assert.ok(statusForm, 'Die Bewerbung hat ein Formular zum Ändern des Status');
+  const [, action, bewerbungId] = statusForm;
+  const actionPath = privatePath + action;
+  const fields = { bewerbungId, status: 'eingeladen' };
+
+  const anonymous = await request(actionPath, { form: fields });
+  assert.equal(anonymous.status, 303);
+  assert.equal(anonymous.headers.get('location'), '/anmelden');
+  assert.equal(
+    (await request(actionPath, { cookie: otherCookie, form: fields })).status,
+    404
+  );
+  assert.equal(
+    (
+      await request(`/recruiter${otherPublicPath}${action}`, {
+        cookie: otherCookie,
+        form: fields
+      })
+    ).status,
+    404
+  );
+  const invalid = await request(actionPath, {
+    cookie,
+    form: { ...fields, status: 'unbekannt' }
+  });
+  assert.equal(invalid.status, 400);
+  assert.match(await invalid.text(), /Wähle einen gültigen Bewerbungsstatus/);
+  const unchanged = await request(privatePath, { cookie });
+  assert.match(await unchanged.text(), />Bewerbungsstatus: neu<\/p>/);
+
+  for (const status of ['eingeladen', 'abgelehnt', 'neu']) {
+    if (status === 'abgelehnt') {
+      await changeStellenanzeigenStatus(publicPath, cookie, 'schliessen');
+      assert.equal((await request(publicPath)).status, 404);
+      const closed = await request(privatePath, { cookie });
+      assert.equal(closed.status, 200);
+      const closedHtml = await closed.text();
+      assert.match(closedHtml, />Ada Beispiel<\/h3>/);
+      assert.match(closedHtml, />Bewerbungsstatus: eingeladen<\/p>/);
+    }
+    const updated = await request(actionPath, {
+      cookie,
+      form: { bewerbungId, status }
+    });
+    assert.equal(updated.status, 303);
+    assert.equal(updated.headers.get('location'), privatePath);
+    const refreshed = await request(privatePath, { cookie });
+    assert.match(
+      await refreshed.text(),
+      new RegExp(`>Bewerbungsstatus: ${status}</p>`)
+    );
+  }
+});
+
 test('Das öffentliche Formular meldet ungültige Bewerbungsfelder und prüft die Länge nach dem Trimmen', async () => {
   const cookie = await registerRecruiter();
   const publicPath = await publishStellenanzeige(

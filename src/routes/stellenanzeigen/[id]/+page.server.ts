@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm';
 import { readBewerbung } from '#lib/server/bewerbung.ts';
 import { getDb } from '#lib/server/db.ts';
 import { bewerbung, stellenanzeige } from '#lib/server/schema.ts';
-import { isStellenanzeigeId } from '#lib/server/stellenanzeige.ts';
+import { isUuid } from '#lib/server/form.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 function rejectClosedStellenanzeige(): never {
@@ -16,7 +16,7 @@ function rejectClosedStellenanzeige(): never {
 
 export const load: PageServerLoad = async ({ params, request, setHeaders }) => {
   if (request.method !== 'POST') setHeaders({ 'cache-control': 'no-cache' });
-  if (!isStellenanzeigeId(params.id)) {
+  if (!isUuid(params.id)) {
     error(404, 'Stellenanzeige nicht gefunden');
   }
 
@@ -42,7 +42,7 @@ export const load: PageServerLoad = async ({ params, request, setHeaders }) => {
 export const actions: Actions = {
   bewerben: async ({ request, params, setHeaders }) => {
     setHeaders({ 'cache-control': 'no-store' });
-    if (!isStellenanzeigeId(params.id)) {
+    if (!isUuid(params.id)) {
       error(404, 'Stellenanzeige nicht gefunden');
     }
 

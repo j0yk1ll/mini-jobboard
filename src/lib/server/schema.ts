@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm';
+import { BEWERBUNGSSTATUS } from '#lib/bewerbung.ts';
 import {
   boolean,
   check,
@@ -92,11 +93,7 @@ export const stellenanzeige = pgTable(
   (table) => [index('stellenanzeige_recruiter_id_idx').on(table.recruiterId)]
 );
 
-export const bewerbungsstatus = pgEnum('bewerbungsstatus', [
-  'neu',
-  'eingeladen',
-  'abgelehnt'
-]);
+export const bewerbungsstatus = pgEnum('bewerbungsstatus', BEWERBUNGSSTATUS);
 
 export const bewerbung = pgTable(
   'bewerbung',
